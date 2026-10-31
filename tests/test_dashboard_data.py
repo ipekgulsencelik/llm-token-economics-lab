@@ -7,7 +7,7 @@ import io
 import json
 
 from lab_core.dashboard_data import (
-    EXPORT_COLUMNS, export_csv, filter_records, scan_results, summarize,
+    EXPORT_COLUMNS, export_csv, filter_records, scan_results, summarize, summarize_lab07,
 )
 
 
@@ -173,3 +173,76 @@ def test_legacy_rows_are_metrics_only(tmp_path):
     assert records[0]["prompt_tokens"] == 5
     assert records[0]["latency_ms"] == 20
     assert "PRIVATE PROMPT" not in export_csv(records)
+
+
+def test_lab07_simulation_metrics_and_strategy_comparisons(tmp_path):
+    _save_json(tmp_path, "lab07_rate_limiting", "demo", "raw_measurements.json", [
+        {
+            "scenario_id": "transient_failures", "strategy_id": "no_backoff",
+            "succeeded": False, "outcome": "FAILED_MAX_ATTEMPTS",
+            "total_attempts": 3, "retry_count": 2, "rate_limit_response_count": 3,
+            "total_scheduled_wait_seconds": 0, "virtual_completion_time_seconds": None,
+        },
+        {
+            "scenario_id": "transient_failures", "strategy_id": "rate_limit_aware",
+            "succeeded": True, "outcome": "SUCCEEDED",
+            "total_attempts": 2, "retry_count": 1, "rate_limit_response_count": 1,
+            "total_scheduled_wait_seconds": 2.5, "virtual_completion_time_seconds": 3.5,
+        },
+        {
+            "scenario_id": "transient_failures", "strategy_id": "rate_limit_aware",
+            "succeeded": True, "outcome": "SUCCEEDED",
+            "total_attempts": 1, "retry_count": 0, "rate_limit_response_count": 0,
+            "total_scheduled_wait_seconds": 0, "virtual_completion_time_seconds": 0.5,
+        },
+    ])
+    rows, warnings = scan_results(tmp_path)
+    assert warnings == []
+    assert len(rows) == 3
+    assert all(r["model"] == "Simulation (no LLM)" for r in rows)
+    assert all(r["simulated"] is True for r in rows)
+    assert all(r["estimated_cost_usd"] is None for r in rows)
+    assert all(r["latency_ms"] is None for r in rows)
+    assert rows[0]["status"] == "FAILED_MAX_ATTEMPTS"
+    assert rows[1]["status"] == "SUCCEEDED"
+    assert len(filter_records(rows, conditions=["rate_limit_aware"])) == 2
+    assert len(filter_records(rows, scenarios=["transient_failures"])) == 3
+
+    by_strategy = {r["strategy"]: r for r in summarize_lab07(rows)}
+    assert len(by_strategy) == 2
+    assert by_strategy["no_backoff"]["success_rate_percent"] == 0
+    assert by_strategy["no_backoff"]["total_retries"] == 2
+    assert by_strategy["no_backoff"]["total_429_responses"] == 3
+    aware = by_strategy["rate_limit_aware"]
+    assert aware["success_rate_percent"] == 100
+    assert aware["total_attempts"] == 3
+    assert aware["total_retries"] == 1
+    assert aware["total_virtual_wait_seconds"] == 2.5
+    assert aware["mean_successful_virtual_completion_seconds"] == 2.0
+    assert "rate_limit_response_count" in EXPORT_COLUMNS
+    assert "retry_count" in EXPORT_COLUMNS
+
+
+def test_lab07_missing_metrics_stay_missing(tmp_path):
+    _save_json(tmp_path, "lab07_rate_limiting", "demo", "raw_measurements.json", [
+        {"scenario_id": "quota", "strategy_id": "no_backoff", "succeeded": False},
+    ])
+    rows, _ = scan_results(tmp_path)
+    summary = summarize_lab07(rows)[0]
+    assert summary["success_rate_percent"] == 0.0
+    assert summary["total_attempts"] is None
+    assert summary["total_retries"] is None
+    assert summary["total_virtual_wait_seconds"] is None
+    assert summary["total_429_responses"] is None
+
+
+def test_lab07_does_not_repurpose_real_model_columns(tmp_path):
+    _save_json(tmp_path, "lab05_model_routing", "real", "routing_measurements.json", [
+        {"model": "a", "strategy": "always_small", "succeeded": True,
+         "total_attempts": 999, "rate_limit_response_count": 800},
+    ])
+    rows, _ = scan_results(tmp_path)
+    assert summarize_lab07(rows) == []
+    assert rows[0]["simulated"] is False
+    assert rows[0]["total_attempts"] is None
+    assert rows[0]["rate_limit_response_count"] is None
