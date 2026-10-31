@@ -18,5 +18,7 @@ jobs:
         run: uv python install 3.12
       - name: Install locked dependencies
         run: uv sync --frozen --group dev
+      - name: Compile dashboard UI
+        run: uv run python -m py_compile dashboard/app.py src/lab_core/dashboard_data.py
       - name: Run offline tests
         run: uv run pytest -q

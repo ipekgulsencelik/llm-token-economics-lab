@@ -118,6 +118,21 @@ directly on the host (see Development, below).
   `lab09_sample_batch_result.json`, a pre-captured sample for Lab09 since a
   real Groq Batch API job can take 24h-7d to complete)
 
+## Offline results dashboard (optional)
+
+Explore saved measurements from all ten labs without an API key or any
+provider calls. Launch from the repository root:
+
+```bash
+uv run --with "streamlit>=1.40,<2" streamlit run dashboard/app.py
+```
+
+Open the local Streamlit address (usually http://localhost:8501).
+The dashboard reads only files already saved in `results/`. To generate
+an API-free example, run `uv run lab-cli lab07 all` and refresh the page.
+Missing values remain unknown rather than becoming zeros; different labs
+are not assumed comparable. See [dashboard documentation](docs/dashboard.md).
+
 ## Development
 
 ```
