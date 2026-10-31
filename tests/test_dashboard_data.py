@@ -211,6 +211,8 @@ def test_lab07_simulation_metrics_and_strategy_comparisons(tmp_path):
     by_strategy = {r["strategy"]: r for r in summarize_lab07(rows)}
     assert len(by_strategy) == 2
     assert by_strategy["no_backoff"]["success_rate_percent"] == 0
+    assert by_strategy["no_backoff"]["successful_clients"] == 0
+    assert by_strategy["rate_limit_aware"]["successful_clients"] == 2
     assert by_strategy["no_backoff"]["total_retries"] == 2
     assert by_strategy["no_backoff"]["total_429_responses"] == 3
     aware = by_strategy["rate_limit_aware"]
