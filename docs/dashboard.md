@@ -55,3 +55,15 @@ so it does not generate actual provider token billing or model-answer quality.
 
 Paired experiment-level comparisons with uncertainty bands, per-lab specialized
 charts, dashboard UI integration tests and deployment hardening.
+
+## Lab07 simulator comparison
+
+Lab07's saved measurements contain simulation scenarios (`scenario_id`),
+retry strategies (`strategy_id`), virtual wait times, retry counts and
+synthetic HTTP 429 responses. The dashboard now groups them by run, scenario
+and strategy to show simulated success rate, retry attempts, rate-limit
+responses and virtual wait.
+
+Use **Simulation scenario** in the sidebar to focus on one scenario.
+These values are simulated: they are **not** real provider response times,
+model-answer accuracy, or API billing records.

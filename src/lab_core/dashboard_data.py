@@ -92,7 +92,7 @@ def _model(row: dict, manifest: dict) -> str:
 
 def _normalize(row: dict, *, lab: str, experiment: str, run_id: str,
                source: str, manifest: dict) -> dict:
-    status = _first(row, ("request_status", "reconciliation_status", "stream_status"))
+    status = _first(row, ("request_status", "reconciliation_status", "stream_status", "outcome"))
     succeeded = _bool(row.get("succeeded"))
     if succeeded is None and status is not None:
         if str(status).upper() == "SUCCESS":
@@ -116,7 +116,7 @@ def _normalize(row: dict, *, lab: str, experiment: str, run_id: str,
         None,
     )
     condition = _first(row, (
-        "strategy", "condition_id", "condition", "execution_mode", "call_purpose",
+        "strategy_id", "strategy", "condition_id", "condition", "execution_mode", "call_purpose",
         "prompt_type", "metadata.experiment_id",
     ))
     return {
@@ -124,10 +124,17 @@ def _normalize(row: dict, *, lab: str, experiment: str, run_id: str,
         "experiment": experiment,
         "run_id": run_id,
         "source": source,
-        "model": _model(row, manifest),
+        "model": "Simulation (no LLM)" if lab == "lab07" else _model(row, manifest),
         "condition": str(condition) if condition is not None else "Unspecified",
+        "scenario": str(row.get("scenario_id") or "Unspecified"),
         "timestamp": str(_first(row, ("timestamp", "metadata.timestamp")) or ""),
         "status": str(status) if status is not None else "Unknown",
+        "simulated": lab == "lab07",
+        "total_attempts": _numeric(row.get("total_attempts"), integral=True) if lab == "lab07" else None,
+        "retry_count": _numeric(row.get("retry_count"), integral=True) if lab == "lab07" else None,
+        "rate_limit_response_count": _numeric(row.get("rate_limit_response_count"), integral=True) if lab == "lab07" else None,
+        "total_scheduled_wait_seconds": _numeric(row.get("total_scheduled_wait_seconds")) if lab == "lab07" else None,
+        "virtual_completion_time_seconds": _numeric(row.get("virtual_completion_time_seconds")) if lab == "lab07" else None,
         "succeeded": succeeded,
         "answer_correct": _bool(row.get("answer_correct")),
         "prompt_tokens": _numeric(_first(row, (
@@ -272,9 +279,9 @@ def scan_results(results_dir: Path) -> tuple[list[dict], list[str]]:
 
 def filter_records(records: Iterable[dict], *, labs: Iterable[str] = (),
                    runs: Iterable[str] = (), models: Iterable[str] = (),
-                   conditions: Iterable[str] = ()) -> list[dict]:
-    selected = [set(values) for values in (labs, runs, models, conditions)]
-    keys = ("lab", "run_id", "model", "condition")
+                   conditions: Iterable[str] = (), scenarios: Iterable[str] = ()) -> list[dict]:
+    selected = [set(values) for values in (labs, runs, models, conditions, scenarios)]
+    keys = ("lab", "run_id", "model", "condition", "scenario")
     return [
         row for row in records
         if all(not values or row[key] in values for key, values in zip(keys, selected))
@@ -311,10 +318,53 @@ def summarize(records: Iterable[dict], group_keys: tuple[str, ...] = (
     return summary
 
 
+def summarize_lab07(records: Iterable[dict]) -> list[dict]:
+    """Group synthetic retry measurements by run, scenario and strategy.
+
+    These are virtual scheduling measurements, not actual API latency,
+    model accuracy or provider charges. Missing values are never imputed.
+    """
+    groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for record in records:
+        if record.get("lab") == "lab07":
+            groups[(record["run_id"], record["scenario"], record["condition"])].append(record)
+
+    result = []
+    for (run_id, scenario, strategy), group in sorted(groups.items()):
+        def known(key):
+            return [row[key] for row in group if row[key] is not None]
+
+        success = known("succeeded")
+        completions = known("virtual_completion_time_seconds")
+        attempts = known("total_attempts")
+        retries = known("retry_count")
+        rate_limits = known("rate_limit_response_count")
+        waits = known("total_scheduled_wait_seconds")
+        result.append({
+            "run_id": run_id,
+            "scenario": scenario,
+            "strategy": strategy,
+            "simulated_clients": len(group),
+            "success_rate_percent": 100 * sum(success) / len(success) if success else None,
+            "success_evaluated": len(success),
+            "total_attempts": sum(attempts) if attempts else None,
+            "total_retries": sum(retries) if retries else None,
+            "total_429_responses": sum(rate_limits) if rate_limits else None,
+            "total_virtual_wait_seconds": sum(waits) if waits else None,
+            "mean_successful_virtual_completion_seconds": (
+                sum(completions) / len(completions) if completions else None
+            ),
+        })
+    return result
+
+
 EXPORT_COLUMNS = (
-    "lab", "experiment", "run_id", "source", "model", "condition", "timestamp",
-    "status", "succeeded", "answer_correct", "prompt_tokens", "completion_tokens",
-    "total_tokens", "estimated_cost_usd", "cost_basis", "latency_ms",
+    "lab", "experiment", "run_id", "source", "model", "condition", "scenario",
+    "timestamp", "status", "succeeded", "answer_correct", "prompt_tokens",
+    "completion_tokens", "total_tokens", "estimated_cost_usd", "cost_basis",
+    "latency_ms", "simulated", "total_attempts", "retry_count",
+    "rate_limit_response_count", "total_scheduled_wait_seconds",
+    "virtual_completion_time_seconds",
 )
 
 

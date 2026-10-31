@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from lab_core.dashboard_data import (
-    EXPORT_COLUMNS, export_csv, filter_records, scan_results, summarize,
+    EXPORT_COLUMNS, export_csv, filter_records, scan_results, summarize, summarize_lab07,
 )
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
@@ -42,8 +42,13 @@ with st.sidebar:
         conditions = st.multiselect(
             "Condition / strategy", sorted({r["condition"] for r in model_filtered}),
         )
+        condition_filtered = filter_records(model_filtered, conditions=conditions)
+        scenarios = st.multiselect(
+            "Simulation scenario",
+            sorted({r["scenario"] for r in condition_filtered if r["lab"] == "lab07"}),
+        )
     else:
-        labs, runs, models, conditions = [], [], [], []
+        labs, runs, models, conditions, scenarios = [], [], [], [], []
 
 if warnings:
     with st.expander(f"{len(warnings)} unreadable artifact(s)", expanded=False):
@@ -64,7 +69,7 @@ if not records:
     st.stop()
 
 filtered = filter_records(
-    records, labs=labs, runs=runs, models=models, conditions=conditions,
+    records, labs=labs, runs=runs, models=models, conditions=conditions, scenarios=scenarios,
 )
 if not filtered:
     st.warning("No measurements match these filters. Adjust the sidebar selections.")
@@ -145,7 +150,37 @@ with comparison:
             any_chart = True
             st.markdown(f"**{title}**")
             st.bar_chart(data, x="Group", y=y_label, horizontal=True)
-    if not any_chart:
+    simulation = summarize_lab07(filtered)
+    if simulation:
+        st.subheader("Lab07 — simulated retry strategies")
+        st.caption(
+            "No LLM or real API requests were made. These virtual-clock "
+            "measurements are not model accuracy, API cost, or actual latency."
+        )
+        st.dataframe(simulation, use_container_width=True, hide_index=True)
+        simulation_charts = (
+            ("Simulated success rate", "success_rate_percent", "Success (%)"),
+            ("Total retries", "total_retries", "Retries"),
+            ("Simulated HTTP 429 responses", "total_429_responses", "429 responses"),
+            ("Scheduled virtual wait", "total_virtual_wait_seconds", "Virtual wait (seconds)"),
+        )
+        for title, field, axis_label in simulation_charts:
+            chart_data = [
+                {
+                    "Scenario / strategy": " / ".join(
+                        (r["run_id"], r["scenario"], r["strategy"])
+                    ),
+                    axis_label: r[field],
+                }
+                for r in simulation if r[field] is not None
+            ]
+            if chart_data:
+                st.markdown(f"**{title}**")
+                st.bar_chart(
+                    chart_data, x="Scenario / strategy", y=axis_label, horizontal=True,
+                )
+
+    if not any_chart and not simulation:
         st.info("These files do not contain numeric values for the comparison charts.")
 
 with detail:
