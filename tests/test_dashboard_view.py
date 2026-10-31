@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from lab_core.dashboard_view import (
+    LAB_CATALOG,
+    lab_measurement_counts,
     scenario_label,
     select_simulation_comparison,
     simulation_chart_rows,
@@ -89,3 +91,23 @@ def test_missing_metrics_are_not_replaced_by_zero():
 def test_chart_field_allowlist_prevents_unintended_columns():
     with pytest.raises(ValueError, match="Unsupported"):
         simulation_chart_rows(_sample_rows(), "prompt_text", "Text")
+
+
+def test_catalog_always_lists_all_ten_labs_even_without_results():
+    assert LAB_CATALOG == tuple(f"lab{n:02d}" for n in range(1, 11))
+    counts = lab_measurement_counts([])
+    assert tuple(counts) == LAB_CATALOG
+    assert all(value == 0 for value in counts.values())
+
+
+def test_lab01_subexperiments_count_under_one_lab_and_other_labs_stay_visible():
+    counts = lab_measurement_counts([
+        {"lab": "lab01", "experiment": "lab01_effort"},
+        {"lab": "lab01", "experiment": "lab01_factorial"},
+        {"lab": "lab07", "experiment": "lab07_rate_limiting"},
+        {"lab": "unexpected"},
+    ])
+    assert counts["lab01"] == 2
+    assert counts["lab07"] == 1
+    assert counts["lab02"] == 0
+    assert len(counts) == 10
