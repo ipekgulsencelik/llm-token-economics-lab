@@ -19,6 +19,8 @@ from lab_core.dashboard_data import (
     summarize_lab07,
 )
 from lab_core.dashboard_view import (
+    LAB_CATALOG,
+    lab_measurement_counts,
     scenario_label,
     select_simulation_comparison,
     simulation_chart_rows,
@@ -44,8 +46,21 @@ with st.sidebar:
     if st.button("Refresh results", use_container_width=True):
         st.rerun()
 
+    counts = lab_measurement_counts(records)
+    labs = st.multiselect(
+        "Lab",
+        LAB_CATALOG,
+        format_func=lambda lab: (
+            f"{lab.upper()} · {counts[lab]} saved measurements"
+            if counts[lab] else f"{lab.upper()} · No saved results"
+        ),
+        help="All ten labs are listed. Only experiments with local saved results have measurements.",
+    )
+    st.caption(
+        f"Saved measurements found for "
+        f"{sum(count > 0 for count in counts.values())} of {len(LAB_CATALOG)} labs."
+    )
     if records:
-        labs = st.multiselect("Lab", sorted({row["lab"] for row in records}))
         lab_rows = filter_records(records, labs=labs)
         runs = st.multiselect("Run", sorted({row["run_id"] for row in lab_rows}))
         run_rows = filter_records(lab_rows, runs=runs)
@@ -65,7 +80,7 @@ with st.sidebar:
             format_func=scenario_label,
         )
     else:
-        labs, runs, models, conditions, scenarios = [], [], [], [], []
+        runs, models, conditions, scenarios = [], [], [], []
 
     with st.expander("Local data directory", expanded=False):
         st.code(str(RESULTS_DIR))
@@ -76,7 +91,7 @@ if warnings:
             st.warning(warning)
 
 if not records:
-    st.warning("No saved experiment results were found.")
+    st.warning("No saved experiment results were found in the local results/ directory.")
     st.markdown("To create an API-free Lab07 simulation, run:")
     st.code("uv run lab-cli lab07 all", language="powershell")
     st.caption("Then select Refresh results. No API key is required.")
@@ -87,7 +102,15 @@ filtered = filter_records(
     conditions=conditions, scenarios=scenarios,
 )
 if not filtered:
-    st.warning("No measurements match those filters.")
+    if labs and not any(row["lab"] in labs for row in records):
+        st.info(
+            "No saved results exist yet for the selected lab(s) in this local "
+            "results/ folder. The laboratory code is available, but selecting "
+            "a lab does not run experiments. Most labs require a separate, "
+            "explicitly authorized live API run to create measurements."
+        )
+    else:
+        st.warning("No measurements match these filters. Clear or change the selections.")
     st.stop()
 
 st.info(

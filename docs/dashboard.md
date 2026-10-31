@@ -30,6 +30,7 @@ so it does not generate actual provider token billing or model-answer quality.
 
 - Discover runs from existing per-lab experiment directories.
 - Normalize approved numeric metrics across the heterogeneous lab schemas.
+- Choose from all 10 implemented labs, including those with no saved results.
 - Filter by lab, run, model, and strategy/condition.
 - Inspect measured requests, coverage, response quality, estimated cost,
   latency and token totals.
@@ -75,3 +76,14 @@ within a chosen lab and run. The sidebar filters apply to all tabs.
 
 These simulation values are **not** real provider response times,
 model-answer accuracy, or API billing records.
+
+## Why a lab may show "No saved results"
+
+The Lab selector lists all ten implemented labs, whether or not they have
+been run. A count of zero is not a missing module: it means the selected
+lab has no supported measurement files under the local `results/` directory.
+Dashboard filters never start an experiment or make a provider API call.
+
+Lab07 is the API-free retry simulator; for the other labs, creating new
+provider measurements normally requires deliberately configuring and
+authorizing a live run. See [lab instructions](README.md) for each workflow.

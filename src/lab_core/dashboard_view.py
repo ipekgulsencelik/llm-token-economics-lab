@@ -9,6 +9,22 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from lab_core.dashboard_data import EXPERIMENT_SOURCES
+
+
+# Every implemented lab appears in the selector, even without saved results.
+LAB_CATALOG = tuple(sorted({name.split("_", 1)[0] for name in EXPERIMENT_SOURCES}))
+
+
+def lab_measurement_counts(records: Iterable[dict]) -> dict[str, int]:
+    """Measurement coverage by lab; zero means no local results were found."""
+    counts = {lab: 0 for lab in LAB_CATALOG}
+    for record in records:
+        lab = record.get("lab")
+        if lab in counts:
+            counts[lab] += 1
+    return counts
+
 STRATEGY_LABELS = {
     "no_backoff": "No backoff",
     "exponential_backoff": "Exponential",
