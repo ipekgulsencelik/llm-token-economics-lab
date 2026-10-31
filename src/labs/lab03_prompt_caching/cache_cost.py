@@ -47,7 +47,7 @@ def compute_uncached_prompt_tokens(prompt_tokens: Optional[int], cached_tokens: 
     if prompt_tokens is None or cached_tokens is None:
         return None
     uncached = prompt_tokens - cached_tokens
-    if uncached < 0:
+    if cached_tokens < 0 or uncached < 0:
         return None
     return uncached
 
