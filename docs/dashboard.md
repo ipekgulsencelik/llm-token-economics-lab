@@ -64,6 +64,14 @@ synthetic HTTP 429 responses. The dashboard now groups them by run, scenario
 and strategy to show simulated success rate, retry attempts, rate-limit
 responses and virtual wait.
 
-Use **Simulation scenario** in the sidebar to focus on one scenario.
-These values are simulated: they are **not** real provider response times,
+Use **Retry simulator** to select exactly one saved Lab07 run and one
+scenario at a time. Four two-column charts compare the four strategies,
+using short, readable names (No backoff, Exponential, Exponential + jitter,
+Rate-limit aware). This avoids long run IDs on the chart axis and prevents
+accidentally comparing unlike scenario conditions.
+
+The **Model comparison** tab instead focuses on saved real-model experiments
+within a chosen lab and run. The sidebar filters apply to all tabs.
+
+These simulation values are **not** real provider response times,
 model-answer accuracy, or API billing records.
