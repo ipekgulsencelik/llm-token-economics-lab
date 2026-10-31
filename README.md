@@ -69,7 +69,7 @@ needed, only Docker Engine/Desktop + Docker Compose.
 # 1. Build the image (first time, or after pulling changes)
 docker compose build
 
-# 2. Smoke-test: should print the CLI help with all 9 labs listed
+# 2. Smoke-test: should print the CLI help with all 10 labs listed
 docker compose run --rm lab-runner --help
 
 # 3. Run a lab. Lab07 is fully simulated, so it needs no API key or --live --
