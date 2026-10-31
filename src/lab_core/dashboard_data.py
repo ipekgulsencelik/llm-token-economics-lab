@@ -346,6 +346,7 @@ def summarize_lab07(records: Iterable[dict]) -> list[dict]:
             "strategy": strategy,
             "simulated_clients": len(group),
             "success_rate_percent": 100 * sum(success) / len(success) if success else None,
+            "successful_clients": sum(success) if success else None,
             "success_evaluated": len(success),
             "total_attempts": sum(attempts) if attempts else None,
             "total_retries": sum(retries) if retries else None,
