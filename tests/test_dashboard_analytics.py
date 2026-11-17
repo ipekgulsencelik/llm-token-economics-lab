@@ -304,12 +304,16 @@ def test_compact_real_provider_groups_and_missing_quality():
                source="routing_measurements.json", simulated=False,
                model="model-a", condition="control", cost_basis="Estimated",
                succeeded=True, answer_correct=None, total_tokens=12,
-               latency_ms=120, estimated_cost_usd=0.000012),
+               latency_ms=120, estimated_cost_usd=0.000012,
+               retry_count=None, rate_limit_response_count=None,
+               total_scheduled_wait_seconds=None),
         record(lab="lab05", experiment="lab05_model_routing",
                source="routing_measurements.json", simulated=False,
                model="model-a", condition="candidate", cost_basis="Estimated",
                succeeded=False, answer_correct=None, total_tokens=15,
-               latency_ms=130, estimated_cost_usd=0.000020),
+               latency_ms=130, estimated_cost_usd=0.000020,
+               retry_count=None, rate_limit_response_count=None,
+               total_scheduled_wait_seconds=None),
     ]
     report = build_scoped_benchmark(rows, lab="lab05", run_id="pilot",
                                     scenario="transient_failures")
