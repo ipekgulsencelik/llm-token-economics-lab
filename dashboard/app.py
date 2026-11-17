@@ -10,7 +10,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dashboard.analytics_ui import render_advanced_analytics
+from analytics_ui import render_advanced_analytics
 from lab_core.dashboard_data import (
     EXPORT_COLUMNS,
     export_csv,
