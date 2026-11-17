@@ -21,8 +21,9 @@ from lab_core.dashboard_analytics import (
     chart_display_rows,
     chart_rows,
     compare_selected,
-    comparison_display_rows,
+    compact_comparison_rows,
     groups_for_context,
+    metric_categories,
     matching_contexts,
 )
 from lab_core.experiment_comparison import render_markdown
@@ -179,18 +180,34 @@ def render_advanced_analytics(records: list[dict], results_dir: Path) -> None:
         f"({comparison['candidate']['requests']} saved records)"
     )
     st.markdown("**Measured values and differences**")
-    st.dataframe(comparison_display_rows(comparison), use_container_width=True, hide_index=True)
+    categories = metric_categories(comparison)
+    selected_category = st.selectbox(
+        "Metric category", list(categories), key="analytics_metric_category",
+        help="Choose a focused metric group, or show all metrics including unavailable ones.",
+    )
+    visible_metrics = categories[selected_category]
+    st.dataframe(
+        compact_comparison_rows(comparison, visible_metrics),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "Metric": st.column_config.TextColumn("Metric", width="medium"),
+            "Unit": st.column_config.TextColumn("Unit", width="small"),
+            "Baseline": st.column_config.TextColumn("Baseline", width="small"),
+            "Candidate": st.column_config.TextColumn("Candidate", width="small"),
+            "Delta": st.column_config.TextColumn("Delta", width="small"),
+            "Relative delta": st.column_config.TextColumn("Relative delta", width="small"),
+            "n (B/C)": st.column_config.TextColumn("n (B/C)", width="small"),
+        },
+    )
     st.caption(
-        "Absolute delta = candidate − baseline. Rates are shown as percentages "
-        "and their deltas in percentage points (pp). Each n is the count of "
-        "observed values for that metric, not necessarily the number of requests. "
-        "Zero is measured; N/A is missing or undefined (including relative delta "
-        "when the baseline is zero)."
+        "Delta = candidate − baseline; rate deltas use percentage points (pp). "
+        "n (B/C) is the observed count for baseline/candidate, not necessarily "
+        "total requests. N/A means missing or undefined, never zero. "
+        "The all-metrics category shows unavailable measurements for auditing."
     )
 
     metrics_with_values = [
-        key for key in comparison["metrics"]
-        if key in METRIC_LABELS and chart_rows(comparison, key)
+        key for key in visible_metrics if chart_rows(comparison, key)
     ]
     if metrics_with_values:
         selected_metric = st.selectbox(
