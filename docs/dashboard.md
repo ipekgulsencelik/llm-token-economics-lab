@@ -134,6 +134,29 @@ and percentage-point delta for success/answer accuracy. A recorded
 zero is not an unavailable value. Relative percentage is undefined
 when the baseline is zero, and is displayed as unavailable.
 
+### Reading the improved comparison display
+
+The Advanced analytics table now renders missing or undefined values as
+**N/A**, while a measured zero stays **0** and the independent observed
+denominators (**Baseline n** / **Candidate n**) remain visible. Success
+and answer-accuracy fractions display as percentages, with differences
+expressed in percentage points. These changes affect only the Streamlit
+presentation; the comparison engine and JSON/Markdown downloads retain
+their original numeric and null contracts.
+
+A prominent provenance message labels each selected comparison as either
+**OFFLINE SIMULATION** (Lab07: synthetic clients, retries, 429s and virtual
+wait; no real provider tokens, billing, latency or model-answer accuracy)
+or **RECORDED API MEASUREMENTS** (saved provider observations with estimated
+costs). The baseline and candidate condition names and record counts appear
+above the table.
+
+Charts have direct value labels, a percentage axis for rates, tooltips
+with the metric-specific observed **n**, and visible zero values. Metrics
+with no observed values are not offered for plotting. The visualization
+remains descriptive, not a confidence interval, ranking, or proof of
+causality.
+
 The charts display **two recorded group values**, not confidence
 intervals or inference about causal effects. For Lab07 these are
 **synthetic client outcomes**, retries, rate-limit counts and virtual

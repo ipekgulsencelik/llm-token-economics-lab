@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import altair as alt
 import streamlit as st
 
 from lab_core.dashboard_analytics import (
@@ -17,9 +18,10 @@ from lab_core.dashboard_analytics import (
     available_runs,
     available_scenarios,
     build_scoped_benchmark,
+    chart_display_rows,
     chart_rows,
     compare_selected,
-    comparison_rows,
+    comparison_display_rows,
     groups_for_context,
     matching_contexts,
 )
@@ -158,12 +160,32 @@ def render_advanced_analytics(records: list[dict], results_dir: Path) -> None:
         "files_checked": status["files_checked"],
         "records_checked": status["records_checked"],
     }
-    st.markdown("**Measured values and differences**")
-    st.dataframe(comparison_rows(comparison), use_container_width=True, hide_index=True)
+    if comparison["simulated"]:
+        st.info(
+            "OFFLINE SIMULATION · These are synthetic client outcomes and virtual "
+            "wait times. No LLM was called. Real token usage, estimated API cost, "
+            "observed API latency and answer accuracy are unavailable (N/A)."
+        )
+    else:
+        st.info(
+            "RECORDED API MEASUREMENTS · Values come from saved provider runs. "
+            "Costs are estimates, not invoices; missing measurements are N/A. "
+            "Comparisons are descriptive, not causal."
+        )
     st.caption(
-        "Absolute delta = candidate − baseline. Success and accuracy deltas are in "
-        "percentage points (pp). Each n is the number of observed values for that metric. "
-        "Zero is a valid observation; N/A means unavailable."
+        f"Baseline: **{comparison['baseline']['condition']}** "
+        f"({comparison['baseline']['requests']} saved records) · "
+        f"Candidate: **{comparison['candidate']['condition']}** "
+        f"({comparison['candidate']['requests']} saved records)"
+    )
+    st.markdown("**Measured values and differences**")
+    st.dataframe(comparison_display_rows(comparison), use_container_width=True, hide_index=True)
+    st.caption(
+        "Absolute delta = candidate − baseline. Rates are shown as percentages "
+        "and their deltas in percentage points (pp). Each n is the count of "
+        "observed values for that metric, not necessarily the number of requests. "
+        "Zero is measured; N/A is missing or undefined (including relative delta "
+        "when the baseline is zero)."
     )
 
     metrics_with_values = [
@@ -175,15 +197,39 @@ def render_advanced_analytics(records: list[dict], results_dir: Path) -> None:
             "Metric to visualize", metrics_with_values,
             format_func=lambda key: METRIC_LABELS[key], key="analytics_chart_metric",
         )
-        values = chart_rows(comparison, selected_metric)
-        st.bar_chart(
-            values, x="Group", y="Observed value",
-            horizontal=True, height=240,
+        values = chart_display_rows(comparison, selected_metric)
+        metric = comparison["metrics"][selected_metric]
+        is_rate = metric["unit"] == "fraction"
+        source = alt.InlineData(values=values)
+        axis = alt.Axis(format=".0%" if is_rate else "~g")
+        x = alt.X(
+            "Observed value:Q",
+            title="Observed rate" if is_rate else metric["unit"],
+            scale=alt.Scale(domain=[0, 1.08] if is_rate else None, zero=True),
+            axis=axis,
+        )
+        y = alt.Y("Group:N", sort=["Baseline", "Candidate"], title=None)
+        tooltips = [
+            alt.Tooltip("Group:N"),
+            alt.Tooltip("Value label:N", title="Observed value"),
+            alt.Tooltip("Observed n:Q", title="Measured n"),
+        ]
+        bars = alt.Chart(source).mark_bar(size=30).encode(
+            x=x, y=y, color=alt.Color("Group:N", legend=None), tooltip=tooltips,
+        )
+        labels = alt.Chart(source).mark_text(
+            align="left", baseline="middle", dx=6,
+        ).encode(x=x, y=y, text=alt.Text("Value label:N"))
+        st.altair_chart(
+            (bars + labels).properties(height=150, padding={"right": 65}),
+            use_container_width=True,
         )
         st.caption(
-            f"Unit: {comparison['metrics'][selected_metric]['unit']}. "
-            "The visualization shows group values, not statistical uncertainty. "
-            "Check observed n in the table above."
+            f"Baseline: {comparison['baseline']['condition']} · "
+            f"Candidate: {comparison['candidate']['condition']} · "
+            f"Unit: {'percent (%)' if is_rate else metric['unit']}. "
+            "Bar labels show observed group values, including zero; hover for "
+            "measured n. These are descriptive values, not confidence intervals."
         )
     else:
         st.info("No observed numeric metric is available to chart for this comparison.")

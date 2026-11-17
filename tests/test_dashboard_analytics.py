@@ -13,9 +13,12 @@ from lab_core.dashboard_analytics import (
     available_runs,
     available_scenarios,
     build_scoped_benchmark,
+    chart_display_rows,
     chart_rows,
     compare_selected,
+    comparison_display_rows,
     comparison_rows,
+    format_display_value,
     group_id,
     groups_for_context,
     matching_contexts,
@@ -193,3 +196,55 @@ def test_no_direct_streamlit_dependency_in_pure_analytics_layer():
 
     assert "streamlit" not in analytics.__dict__
     assert sys.modules.get("lab_core.dashboard_analytics") is analytics
+
+
+def test_display_table_shows_na_without_changing_numeric_comparison_contract():
+    report = build_scoped_benchmark(
+        data(), lab="lab07", run_id="pilot", scenario="transient_failures",
+    )
+    groups = {group["condition"]: group_id(group) for group in report["groups"]}
+    compared = compare_selected(
+        report, groups["no_backoff"], groups["exponential_backoff"],
+    )
+    rendered = {row["Metric"]: row for row in comparison_display_rows(compared)}
+
+    assert compared["simulated"] is True
+    assert rendered["Mean estimated cost (USD)"]["Baseline"] == "N/A"
+    assert rendered["Mean estimated cost (USD)"]["Candidate"] == "N/A"
+    assert rendered["Mean estimated cost (USD)"]["Baseline n"] == 0
+    assert rendered["Mean virtual scheduled wait (s)"]["Baseline"] == "0"
+    assert rendered["Mean virtual scheduled wait (s)"]["Relative delta (%)"] == "N/A"
+    assert rendered["Client / request success"]["Baseline"] == "50%"
+    assert rendered["Client / request success"]["Candidate"] == "100%"
+    assert rendered["Client / request success"]["Delta"] == "50"
+    assert rendered["Client / request success"]["Delta unit"] == "pp"
+    assert rendered["Client / request success"]["Unit"] == "percent (%)"
+    # Calculations, exported JSON and the pre-existing CLI contract stay numeric.
+    raw = {row["Metric"]: row for row in comparison_rows(compared)}
+    assert raw["Mean estimated cost (USD)"]["Baseline"] is None
+    assert raw["Mean virtual scheduled wait (s)"]["Baseline"] == 0
+    assert raw["Client / request success"]["Baseline"] == 0.5
+    assert compared["metrics"]["total_scheduled_wait_seconds"]["relative_delta_percent"] is None
+
+
+def test_chart_labels_show_observed_zero_and_never_plot_missing_values():
+    report = build_scoped_benchmark(
+        data(), lab="lab07", run_id="pilot", scenario="transient_failures",
+    )
+    groups = {group["condition"]: group_id(group) for group in report["groups"]}
+    compared = compare_selected(
+        report, groups["no_backoff"], groups["exponential_backoff"],
+    )
+    assert chart_display_rows(compared, "estimated_cost_usd") == []
+    assert chart_display_rows(compared, "total_scheduled_wait_seconds") == [
+        {"Group": "Baseline", "Observed value": 0.0, "Observed n": 2, "Value label": "0"},
+        {"Group": "Candidate", "Observed value": 4.0, "Observed n": 2, "Value label": "4"},
+    ]
+    assert chart_display_rows(compared, "success_rate") == [
+        {"Group": "Baseline", "Observed value": 0.5, "Observed n": 2, "Value label": "50%"},
+        {"Group": "Candidate", "Observed value": 1.0, "Observed n": 2, "Value label": "100%"},
+    ]
+    assert format_display_value(None) == "N/A"
+    assert format_display_value(0) == "0"
+    assert format_display_value(0, fraction=True) == "0%"
+    assert format_display_value(0.0000012345) != "0"
