@@ -18,7 +18,9 @@ from lab_core.dashboard_analytics import (
     compare_selected,
     comparison_display_rows,
     comparison_rows,
+    compact_comparison_rows,
     format_display_value,
+    metric_categories,
     group_id,
     groups_for_context,
     matching_contexts,
@@ -248,3 +250,90 @@ def test_chart_labels_show_observed_zero_and_never_plot_missing_values():
     assert format_display_value(0) == "0"
     assert format_display_value(0, fraction=True) == "0%"
     assert format_display_value(0.0000012345) != "0"
+
+
+def test_compact_simulation_categories_are_exclusive_and_auditable():
+    report = build_scoped_benchmark(
+        data(), lab="lab07", run_id="pilot", scenario="transient_failures",
+    )
+    ids = {g["condition"]: group_id(g) for g in report["groups"]}
+    compared = compare_selected(report, ids["no_backoff"], ids["exponential_backoff"])
+
+    choices = metric_categories(compared)
+    assert choices["Available metrics"] == (
+        "success_rate", "retry_count", "rate_limit_response_count",
+        "total_scheduled_wait_seconds",
+    )
+    assert choices["Reliability and retries"] == (
+        "success_rate", "retry_count", "rate_limit_response_count",
+    )
+    assert choices["Virtual wait"] == ("total_scheduled_wait_seconds",)
+    assert "total_tokens" in choices["All metrics (including N/A)"]
+    assert len(choices["All metrics (including N/A)"]) == len(METRIC_LABELS)
+
+    compact = compact_comparison_rows(compared, choices["Available metrics"])
+    assert len(compact) == 4
+    by_metric = {row["Metric"]: row for row in compact}
+    assert by_metric["Request success"] == {
+        "Metric": "Request success",
+        "Unit": "%",
+        "Baseline": "50%",
+        "Candidate": "100%",
+        "Delta": "+50 pp",
+        "Relative delta": "+100%",
+        "n (B/C)": "2 / 2",
+    }
+    assert by_metric["Mean virtual wait"]["Baseline"] == "0"
+    assert by_metric["Mean virtual wait"]["Delta"] == "+4"
+    assert by_metric["Mean virtual wait"]["Relative delta"] == "N/A"
+    assert by_metric["Mean retries"]["Delta"] == "-0.5"
+
+    all_rows = compact_comparison_rows(compared, choices["All metrics (including N/A)"])
+    assert any(r["Metric"] == "Mean tokens" and r["Baseline"] == "N/A"
+               and r["n (B/C)"] == "0 / 0" for r in all_rows)
+    with pytest.raises(ValueError, match="Unsupported dashboard comparison metric"):
+        compact_comparison_rows(compared, ("invalid_field",))
+    # The underlying comparison remains numeric, unchanged and complete.
+    assert compared["metrics"]["total_scheduled_wait_seconds"]["baseline"] == 0
+    assert compared["metrics"]["total_scheduled_wait_seconds"]["relative_delta_percent"] is None
+
+
+def test_compact_real_provider_groups_and_missing_quality():
+    rows = [
+        record(lab="lab05", experiment="lab05_model_routing",
+               source="routing_measurements.json", simulated=False,
+               model="model-a", condition="control", cost_basis="Estimated",
+               succeeded=True, answer_correct=None, total_tokens=12,
+               latency_ms=120, estimated_cost_usd=0.000012,
+               retry_count=None, rate_limit_response_count=None,
+               total_scheduled_wait_seconds=None),
+        record(lab="lab05", experiment="lab05_model_routing",
+               source="routing_measurements.json", simulated=False,
+               model="model-a", condition="candidate", cost_basis="Estimated",
+               succeeded=False, answer_correct=None, total_tokens=15,
+               latency_ms=130, estimated_cost_usd=0.000020,
+               retry_count=None, rate_limit_response_count=None,
+               total_scheduled_wait_seconds=None),
+    ]
+    report = build_scoped_benchmark(rows, lab="lab05", run_id="pilot",
+                                    scenario="transient_failures")
+    ids = {g["condition"]: group_id(g) for g in report["groups"]}
+    compared = compare_selected(report, ids["control"], ids["candidate"])
+    choices = metric_categories(compared)
+    assert choices["Success and quality"] == ("success_rate",)
+    assert choices["Tokens and estimated cost"] == ("total_tokens", "estimated_cost_usd")
+    assert choices["Latency"] == ("latency_ms", "latency_p50_ms", "latency_p95_ms")
+    assert "retry_count" not in choices["Available metrics"]
+    assert "answer_accuracy" not in choices["Available metrics"]
+    assert "answer_accuracy" in choices["All metrics (including N/A)"]
+
+    compact = compact_comparison_rows(compared, choices["Tokens and estimated cost"])
+    assert [x["Metric"] for x in compact] == ["Mean tokens", "Mean estimated cost"]
+    assert compact[0]["Unit"] == "tokens/record"
+    assert compact[0]["n (B/C)"] == "1 / 1"
+    quality_row = next(
+        row for row in compact_comparison_rows(compared, choices["All metrics (including N/A)"])
+        if row["Metric"] == "Answer accuracy"
+    )
+    assert quality_row["Baseline"] == "N/A"
+    assert quality_row["Delta"] == "N/A"

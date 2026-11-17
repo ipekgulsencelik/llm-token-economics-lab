@@ -27,6 +27,104 @@ METRIC_LABELS: dict[str, str] = {
 }
 
 
+# Short presentation-only names and units; the saved output contract stays unchanged.
+COMPACT_METRIC_LABELS = {
+    "success_rate": "Request success",
+    "answer_accuracy": "Answer accuracy",
+    "total_tokens": "Mean tokens",
+    "estimated_cost_usd": "Mean estimated cost",
+    "latency_ms": "Mean latency",
+    "latency_p50_ms": "Latency p50",
+    "latency_p95_ms": "Latency p95",
+    "retry_count": "Mean retries",
+    "rate_limit_response_count": "Mean HTTP 429s",
+    "total_scheduled_wait_seconds": "Mean virtual wait",
+}
+
+COMPACT_METRIC_UNITS = {
+    "success_rate": "%",
+    "answer_accuracy": "%",
+    "total_tokens": "tokens/record",
+    "estimated_cost_usd": "USD/record",
+    "latency_ms": "ms/record",
+    "latency_p50_ms": "ms",
+    "latency_p95_ms": "ms",
+    "retry_count": "retries/client",
+    "rate_limit_response_count": "429s/client",
+    "total_scheduled_wait_seconds": "s/client",
+}
+
+SIMULATION_METRIC_CATEGORIES = {
+    "Reliability and retries": ("success_rate", "retry_count", "rate_limit_response_count"),
+    "Virtual wait": ("total_scheduled_wait_seconds",),
+}
+
+PROVIDER_METRIC_CATEGORIES = {
+    "Success and quality": ("success_rate", "answer_accuracy"),
+    "Tokens and estimated cost": ("total_tokens", "estimated_cost_usd"),
+    "Latency": ("latency_ms", "latency_p50_ms", "latency_p95_ms"),
+}
+
+
+def metric_categories(comparison: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Available metrics first, then context-specific groups and full audit view.
+
+    A metric is available if at least one condition has an actual observation.
+    The all-metrics option deliberately retains unavailable metrics for audit.
+    """
+    supported = tuple(key for key in METRIC_LABELS if key in comparison["metrics"])
+    observed = tuple(
+        key for key in supported
+        if any(
+            comparison["metrics"][key][f"{side}_observed"] > 0
+            and comparison["metrics"][key][side] is not None
+            for side in ("baseline", "candidate")
+        )
+    )
+    choices = {"Available metrics": observed}
+    groups = SIMULATION_METRIC_CATEGORIES if comparison["simulated"] else PROVIDER_METRIC_CATEGORIES
+    for category, keys in groups.items():
+        present = tuple(key for key in keys if key in observed)
+        if present:
+            choices[category] = present
+    choices["All metrics (including N/A)"] = supported
+    return choices
+
+
+def compact_comparison_rows(
+    comparison: dict[str, Any], metric_keys: Iterable[str],
+) -> list[dict[str, str]]:
+    """Narrow UI-only table preserving denominator coverage and undefined deltas."""
+    result = []
+    for key in metric_keys:
+        if key not in COMPACT_METRIC_LABELS or key not in comparison["metrics"]:
+            raise ValueError(f"Unsupported dashboard comparison metric: {key}")
+        metric = comparison["metrics"][key]
+        is_rate = metric["unit"] == "fraction"
+        delta = metric["percentage_point_delta"] if is_rate else metric["absolute_delta"]
+        if delta is None:
+            delta_label = "N/A"
+        else:
+            delta_label = ("+" if delta > 0 else "") + format_display_value(delta)
+            if is_rate:
+                delta_label += " pp"
+        relative = metric["relative_delta_percent"]
+        relative_label = (
+            "N/A" if relative is None
+            else ("+" if relative > 0 else "") + format_display_value(relative) + "%"
+        )
+        result.append({
+            "Metric": COMPACT_METRIC_LABELS[key],
+            "Unit": COMPACT_METRIC_UNITS[key],
+            "Baseline": format_display_value(metric["baseline"], fraction=is_rate),
+            "Candidate": format_display_value(metric["candidate"], fraction=is_rate),
+            "Delta": delta_label,
+            "Relative delta": relative_label,
+            "n (B/C)": f"{metric['baseline_observed']} / {metric['candidate_observed']}",
+        })
+    return result
+
+
 def available_runs(records: Iterable[dict]) -> list[tuple[str, str]]:
     """Unique modern (lab, run) pairs with saved normalized metrics."""
     return sorted({

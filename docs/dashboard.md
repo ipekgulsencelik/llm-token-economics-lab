@@ -136,6 +136,22 @@ when the baseline is zero, and is displayed as unavailable.
 
 ### Reading the improved comparison display
 
+The comparison table now starts in **Available metrics** mode and uses a
+compact seven-column layout: metric, short unit, baseline, candidate, delta,
+relative delta and `n (B/C)`. The `n (B/C)` field contains **separate
+metric-specific observation counts**, not a shared request count. One category
+selector groups Lab07 metrics into **Reliability and retries** or **Virtual
+wait**; provider measurements use **Success and quality**, **Tokens and
+estimated cost** and **Latency**. The final **All metrics (including N/A)**
+option preserves visibility into unavailable fields.
+
+Selecting a category scopes both the table and the visualization picker,
+so unrelated or unmeasured fields do not dominate a run-specific comparison.
+Units are shortened in the UI only (for example `s/client` and
+`USD/record`); rates are still percentages, rate deltas are in percentage
+points, and descriptive statistics are unchanged. The unabridged raw numeric
+comparison is still available through JSON/Markdown downloads.
+
 The Advanced analytics table now renders missing or undefined values as
 **N/A**, while a measured zero stays **0** and the independent observed
 denominators (**Baseline n** / **Candidate n**) remain visible. Success
