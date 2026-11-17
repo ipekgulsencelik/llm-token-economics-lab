@@ -137,6 +137,9 @@ jobs:
           assert len(comparison_rows(compared)) >= 8
           assert chart_rows(compared, "retry_count")
 
+          # Streamlit adds the app directory on live runs; AppTest does not.
+          import sys
+          sys.path.insert(0, "/app/dashboard")
           app = AppTest.from_file("/app/dashboard/app.py", default_timeout=35).run()
           assert not app.exception, [str(exc.message) for exc in app.exception]
           assert "Advanced analytics" in [tab.label for tab in app.tabs]
