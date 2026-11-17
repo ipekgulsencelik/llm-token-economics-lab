@@ -122,6 +122,45 @@ def comparison_rows(comparison: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def format_display_value(value: float | int | None, *, fraction: bool = False) -> str:
+    """Format observed values for the UI, preserving missing values and zero."""
+    if value is None:
+        return "N/A"
+    if fraction:
+        return f"{value * 100:,.2f}".rstrip("0").rstrip(".") + "%"
+    return f"{value:,.6g}"
+
+
+def comparison_display_rows(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    """Render-friendly strings, never used for calculations or downloads.
+
+    Stringify all nullable numeric display columns so Streamlit/Arrow does not
+    coerce a mixed string-and-numeric column or silently replace missing data.
+    Observation counts remain integers.
+    """
+    result = []
+    for row in comparison_rows(comparison):
+        is_rate = row["Unit"] == "fraction"
+        result.append({
+            **row,
+            "Unit": "percent (%)" if is_rate else row["Unit"],
+            "Baseline": format_display_value(row["Baseline"], fraction=is_rate),
+            "Candidate": format_display_value(row["Candidate"], fraction=is_rate),
+            "Delta": format_display_value(row["Delta"]),
+            "Relative delta (%)": format_display_value(row["Relative delta (%)"]),
+        })
+    return result
+
+
+def chart_display_rows(comparison: dict[str, Any], metric_key: str) -> list[dict[str, Any]]:
+    """Add visible bar labels without changing chart measurements or observed n."""
+    fraction = comparison["metrics"][metric_key]["unit"] == "fraction"
+    return [
+        {**row, "Value label": format_display_value(row["Observed value"], fraction=fraction)}
+        for row in chart_rows(comparison, metric_key)
+    ]
+
+
 def chart_rows(comparison: dict[str, Any], metric_key: str) -> list[dict[str, Any]]:
     """Side-by-side absolute values, preserving measured zero and omitting missing."""
     if metric_key not in METRIC_LABELS:
